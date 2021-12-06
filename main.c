@@ -1,51 +1,15 @@
 #include <stdio.h>
-#include <stdbool.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
+#include <stdlib.h>
+#include <signal.h>
 #include <unistd.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <math.h>
-#include <inttypes.h>
-#include <assert.h>
+#include <sys/wait.h>
+#include <stdint.h>
+#include <ctype.h>
 
-
-#define O_RDWR           02
-#define BUFFER_SIZE 32
-#define ULONG unsigned long 
-
-#define FAT_ADDR_SIZE 4
-#define FILE_TOTAL_NAME_LENGTH 11
-#define FILE_NAME_LENGTH 8
-#define FILE_EXT_LENGTH 3
-#define ENTRY_SIZE 32
-#define DIR_CLUSTER_SIZE 4
-#define END_OF_DIR 0x00
-#define FILE_ATTR_BIT_OFFSET 11
-#define KB_IN_BYTES 1021
-
-unsigned char *buffer;
-unsigned long *FAT;
-
-/* boot sector constants */
-#define BS_OEMName_LENGTH 8
-#define BS_VolLab_LENGTH 11
-#define BS_FilSysType_LENGTH 8 
-
-//function prototype
-void bsInfo(void);
-
-
-/* boot sector constants */
-#define BS_OEMName_LENGTH 8
-#define BS_VolLab_LENGTH 11
-#define BS_FilSysType_LENGTH 8 
-
-struct fat32BS_struct {
-	char bootjmp[3];
-	char oem_name[BS_OEMName_LENGTH];
+// Estrutura do Boot Sector do fat32
+struct fat32BS {
+	char oem_name[8];
 	uint16_t bytes_per_sector; 
 	uint8_t sectors_per_cluster; 
 	uint16_t reserved_sector_count;
@@ -70,124 +34,259 @@ struct fat32BS_struct {
 	uint8_t reserved_1; 
 	uint8_t boot_signature; 
 	uint32_t volume_id; 
-	char volume_label[BS_VolLab_LENGTH]; 
-	char fat_type_label[BS_FilSysType_LENGTH];
-	// char BS_CodeReserved[420];
-	// uint8_t BS_SigA; //0x55, sector[510]
-	// uint8_t BS_SigB; //0xAA, sector[511]
+	char volume_label[11]; 
+	char fat_type_label[8];
 };
-typedef struct fat32BS_struct fat32BS;
 
-/* dir entry constants */
-#define DIR_Name_LENGTH 11
-#define DIR_EMPTY 0xE5
-#define DIR_LAST 0x00
-#define DIR_ATTR_HIDDEN 0x02
-#define DIR_ATTR_VOLUME_ID 0x08
-#define DIR_ATTR_DIRECTORY 0x10
-
-struct fat32Dir_struct {
-    char DIR_Name[DIR_Name_LENGTH];
+// Estrutura de diretorios da fat32
+struct fat32Dir {
+    char DIR_Name[12];
     uint8_t DIR_Attr;
-    uint8_t DIR_NTRes;
-    uint8_t DIR_CrtTimeTenth;
+    uint8_t unused1[4];
     uint16_t DIR_CrtTime;
     uint16_t DIR_CrtDate;
-    uint16_t DIR_LstAccDate;
-    uint16_t DIR_FstClusHI;
-    uint16_t DIR_WrtTime;
-    uint16_t DIR_WrtDate;
+	uint16_t DIR_FirstClusterHigh;
+	uint8_t unused2[4];
     uint16_t DIR_FstClusLO;
     uint32_t DIR_FileSize;
 };
 
-typedef struct fat32Dir_struct fat32Dir;
-
-struct FSInfo_struct {
-    uint32_t FSI_LeadSig;
-    char FSI_Reserved1[480];
-    uint32_t FSI_StrucSig;
-    uint32_t FSI_Free_Count;
-    uint32_t FSI_Nxt_Free;
-    char FSI_Reserved2[12];
-    uint32_t FSI_TrailSig;
-};
-
-typedef struct FSInfo_struct FSInfo;
-
-
-
-fat32BS bs;
-int fd;
+// Iniciar a estruta do boot loader
+struct fat32BS bs;
+// Variavel para guardar a imagem do disco
+FILE *fd; 
+// Variaveis para guardar as informacoes do boot sector
 uint32_t sectors_per_cluster;
-off_t fat_begin_lba, cluster_begin_lba;
 uint16_t byte_per_sector, byte_per_cluster;
 FILE* infoFile, *listFile;
 
-int main(){
-	fd = open("disk.img", O_RDONLY);
-    if (fd == -1) {
-        printf("Couldn't open image: .\n");
-        return EXIT_FAILURE;
-    }
-	regBS();
-	bsInfo();
-	return 0;
-}
+// Variavel para guardar a endereco do diretorio raiz
+int32_t RootDirCluster = 0; 
+// Variavel para guardar o endereco do diretorio atual
+int32_t CurrentDirCluster = 0; 
 
-
-void regBS(){
-    read(fd, bs.bootjmp, sizeof(bs.bootjmp));
-    read(fd, bs.oem_name, sizeof(bs.oem_name));
-    read(fd, &bs.bytes_per_sector, sizeof(bs.bytes_per_sector));
-    read(fd, &bs.sectors_per_cluster, sizeof(bs.sectors_per_cluster));
-    read(fd, &bs.reserved_sector_count, sizeof(bs.reserved_sector_count));
-    read(fd, &bs.table_count, sizeof(bs.table_count));
-    read(fd, &bs.root_entry_count, sizeof(bs.root_entry_count));
-    read(fd, &bs.total_sectors_16, sizeof(bs.total_sectors_16));
-    read(fd, &bs.media_type, sizeof(bs.media_type));
-    read(fd, &bs.table_size_16, sizeof(bs.table_size_16));
-    read(fd, &bs.sectors_per_track, sizeof(bs.sectors_per_track));
-    read(fd, &bs.head_side_count, sizeof(bs.head_side_count));
-    read(fd, &bs.hidden_sector_count, sizeof(bs.hidden_sector_count));
-    read(fd, &bs.total_sectors_32, sizeof(bs.total_sectors_32));
-    read(fd, &bs.table_size_32, sizeof(bs.table_size_32));
-    read(fd, &bs.extended_flags, sizeof(bs.extended_flags));
-    read(fd, &bs.FSVerHigh, sizeof(bs.FSVerHigh));
-    read(fd, &bs.FSVerLow, sizeof(bs.FSVerLow));
-    read(fd, &bs.root_cluster, sizeof(bs.root_cluster));
-    read(fd, &bs.fat_info, sizeof(bs.fat_info));
-    read(fd, &bs.backup_BS_sector, sizeof(bs.backup_BS_sector));
-    read(fd, bs.reserved_0, sizeof(bs.reserved_0));
-    read(fd, &bs.drive_number, sizeof(bs.drive_number));
-    read(fd, &bs.reserved_1, sizeof(bs.reserved_1));
-    read(fd, &bs.boot_signature, sizeof(bs.boot_signature));
-    read(fd, &bs.volume_id, sizeof(bs.volume_id));
-    read(fd, bs.volume_label, sizeof(bs.volume_label));
-    read(fd, bs.fat_type_label, sizeof(bs.fat_type_label));
-
-    sectors_per_cluster = bs.sectors_per_cluster;
-    cluster_begin_lba = bs.reserved_sector_count+(bs.table_size_32*bs.table_count);
-    fat_begin_lba = bs.reserved_sector_count;
-    byte_per_sector = bs.bytes_per_sector;
-    byte_per_cluster = bs.sectors_per_cluster*byte_per_sector;
-};
-
+// Array de diretorios
+struct fat32Dir dir[16];
 
 // funcao para printar informacoes do boot sector
 void bsInfo() {
+	// Primeiro setor de dados
     uint32_t FirstDataSector = bs.reserved_sector_count + (bs.table_count * bs.table_size_32);
+	// Setor de dado
     uint32_t DataSec = bs.total_sectors_32 - FirstDataSector;
+	// Contador de todos os clustes
     uint32_t CountofClusters = DataSec / bs.sectors_per_cluster;
-    //Drive name
-    printf("Disk Label: %.*s\n", BS_VolLab_LENGTH, bs.volume_label);
+
+	// Printar informacoes do boot sector
+    printf("Disk Label: %.*s\n", 11, bs.volume_label);
 	printf("File system type: %s\n", bs.fat_type_label);
 	printf("OEM name: %s\n", bs.oem_name);
 	printf("Total sectors: %d\n",bs.total_sectors_32);
 	printf("Bytes per sector: %d\n",bs.bytes_per_sector);
 	printf("Sectors per cluster: %d\n",bs.sectors_per_cluster);
 	printf("Bytes pr Cluster: %d\n",bs.sectors_per_cluster*byte_per_sector);
-	// todo
 	printf("Sectors per Fat: %d\n",bs.table_size_32);
     printf("free Space: %dkB\n", (CountofClusters * bs.sectors_per_cluster * bs.bytes_per_sector)/1024);
+}
+
+// FUncao para criar a estrura de um diretorio dado um endereco
+void CreateDir(int DirAddr, struct fat32Dir* direct) {
+	// ir ate o endereco do diretorio
+    fseek(fd, DirAddr, SEEK_SET);
+	// Loop para guardar os diretorios na struct de diretorio
+    for( int i = 0 ; i < 16; i ++){
+        fread(direct[i].DIR_Name, 1, 11, fd);
+        direct[i].DIR_Name[11] = 0;
+        fread(&direct[i].DIR_Attr, 1, 1, fd);
+        fread(&direct[i].unused1, 1, 4, fd);
+		fread(&direct[i].DIR_CrtTime, 1, 2, fd);
+		fread(&direct[i].DIR_CrtDate, 1, 2, fd);
+        fread(&direct[i].DIR_FirstClusterHigh, 2, 1, fd);
+        fread(&direct[i].unused2, 1, 4, fd);
+        fread(&direct[i].DIR_FstClusLO, 2, 1, fd);
+        fread(&direct[i].DIR_FileSize, 4, 1, fd);
+    }
+}
+
+// Funcao para implementar a operacao PWD
+void listDir(struct fat32Dir* direct) {
+	// Loop para listar todos os diretorios
+	printf("Name:             Size:     CreatedAt:\n");
+	for( int i = 0 ; i < 16; i ++){
+		/***
+		 * caso for um arquivo ou um diretorio:
+		 * printar o nome do diretorio
+		***/
+		if(
+			direct[i].DIR_Attr == 1 ||
+			direct[i].DIR_Attr == 16 ||
+			direct[i].DIR_Attr == 32
+		){
+			printf("%s       %d        %lu\n", direct[i].DIR_Name, direct[i].DIR_Attr, dir[i].DIR_CrtDate);
+		}
+	}
+}
+
+// retorna um endereco por um bloco logico
+int LogicAddr(int32_t sector) {
+	// Caso o setor for vazio, retornar diretorio raiz
+    if(!sector)
+        return RootDirCluster;
+	// Retornar o endereco
+    return (bs.bytes_per_sector * bs.reserved_sector_count) + ((sector - 2) * bs.bytes_per_sector) + (bs.bytes_per_sector * bs.table_count * bs.table_size_32);
+}
+
+
+// Funcao para implementar a operacao CD
+void change_dir(char *path){
+	// Variavel auxiliar para o nome
+    char aux[15];
+	// Token para quebrar "/" da string path
+    char * token; 
+	// flag para ver se achou o diretorio
+    int match; 
+	// caso a string path for 0
+    if(strlen(path) == 0){
+		printf("No argument!\n");
+        return;
+    }
+    // Comeca separando o path em tokens
+    token = strtok(path, "/");
+	// loop enquanto exister tokens apos quebrar em "/"
+    while(token != NULL){
+        // Caso o token nao seja valido
+        if(strlen(token) > 12){
+            printf("Not found!\n");
+            return;
+        }
+        // Transforma o nome para a variavel aux						       
+        strcpy(aux, token);
+		// Numero de espacos em branco na string
+		int whitespace = 11 - strlen(aux);
+		// Transformar tudo em uppercase 
+		for(int i = 0; i < 12; i ++){
+			aux[i] = toupper(aux[i]);
+		}
+		// Adicionar espaco em branco nas strings
+		for(int j = 0; j < whitespace; j ++){
+			strcat(aux, " ");
+		}    
+        match = 0;
+        // loop dos diretorios
+		for(int i = 0; i < 16; i ++) {
+        	// Checar caso exista o diretorio
+            if(!strcmp(dir[i].DIR_Name, aux)){
+				// Pegar o endereco do novo diretorio
+                CurrentDirCluster = LogicAddr(dir[i].DIR_FstClusLO);
+				// Criar a estruta de diretorios
+                CreateDir(CurrentDirCluster, dir);
+				// aumentar o contador de match
+                match ++;
+				// sair do loop
+                break;
+            }
+        }
+        // Se nao achar o diretorio   
+        if(!match){
+            printf("Could not find directory!\n", aux);
+            break;
+        }
+        // Ir para o proximo token
+        token = strtok(NULL, "/");
+        if(token == NULL){
+            break;
+        }
+    }
+}
+
+void printShell(){
+
+}
+
+int main(int agrc, char *argc[]){
+	// Abrir arquivo
+	fd = fopen("disk.img", "r");
+	if(!argc[1]){
+		printf("A disk image is necessary!\n");
+		exit(0);
+	}
+	// Caso o arquivo exista
+	if(fd != NULL){
+		// Ler o boot section
+        fseek(fd, 3, SEEK_SET);
+        fread(bs.oem_name, 1, 8, fd);
+        fread(&bs.bytes_per_sector, 1, 2, fd);
+        fread(&bs.sectors_per_cluster, 1, 1, fd);
+        fread(&bs.reserved_sector_count, 1, 2, fd);
+        fread(&bs.table_count, 1, 1, fd);
+        fread(&bs.root_entry_count, 1, 2, fd);
+        fseek(fd, 32, SEEK_SET);
+		fread(&bs.total_sectors_32, 1, 4, fd);
+        fread(&bs.table_size_32, 1, 4, fd);
+        fseek(fd, 44, SEEK_SET);
+        fread(&bs.root_cluster, 1, 4, fd);
+        fseek(fd, 71, SEEK_SET);
+        fread(bs.volume_label, 1, 11, fd); 
+		fread(bs.fat_type_label, 1, 8, fd); 
+
+		// Setores por cluster
+		sectors_per_cluster = bs.sectors_per_cluster;
+		// Bytes por setores
+		byte_per_sector = bs.bytes_per_sector;
+		// Bytes por clusters
+		byte_per_cluster = bs.sectors_per_cluster*byte_per_sector;
+		// Endereco do diretorio raiz
+		RootDirCluster = (bs.table_count * bs.table_size_32 * bs.bytes_per_sector) + (bs.reserved_sector_count * bs.bytes_per_sector);
+		// Endereco do diretorio atual comecando no diretorio root
+		CurrentDirCluster = RootDirCluster;
+		// Criar a estrutura de diretorio
+		CreateDir(CurrentDirCluster,dir);
+
+		// Main Loop
+		while(1) {
+			// Input do usuario
+			char input[200];
+			// caminho para um arquivo ou diretorio
+			char path[200];
+			// operacao feita no fat32
+			char op[200];
+			// Token para quebra de texto em " "
+			char * token; 
+			// prints do shell
+			printf("\033[0;32m");
+			printf("FatShell:");
+			printf("\033[0;34m");
+			printf("[img/]");
+			printf("$ ");
+			printf("\033[0m");
+			scanf(" %s", input);
+
+			// Opcoes de operacoes
+			if(!strcmp(input, "info")){
+				bsInfo();
+			}
+			else if(!strcmp(input, "pwd")){
+				listDir(dir);
+			}
+			else if(!strcmp(input, "cd")){
+				// token = strtok(input, " ");
+				// strcpy(op, token); 
+				// token = strtok(path, " ");
+				// if(token == NULL) {
+				// 	printf("No directory provided\n");
+				// 	return;
+				// }
+				// change_dir(argc[1]);
+				printf("%s\n", argc[2]);
+				
+            }
+
+		}
+		
+		// bsInfo();
+
+	} else {
+		printf("File dosen't exist or not passed as an argument!\n");
+	}
+	exit(0);
 }
