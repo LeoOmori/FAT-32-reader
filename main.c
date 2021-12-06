@@ -68,6 +68,9 @@ int32_t CurrentDirCluster = 0;
 // Array de diretorios
 struct fat32Dir dir[16];
 
+// Variavel para guardar o nome do diretorio
+char CurrentDirName[100];
+
 // funcao para printar informacoes do boot sector
 void bsInfo() {
 	// Primeiro setor de dados
@@ -170,7 +173,8 @@ void change_dir(char *path){
 		// Adicionar espaco em branco nas strings
 		for(int j = 0; j < whitespace; j ++){
 			strcat(aux, " ");
-		}    
+		} 
+		// deixar setado em falso a flag de diretorio achado
         match = 0;
         // loop dos diretorios
 		for(int i = 0; i < 16; i ++) {
@@ -182,13 +186,14 @@ void change_dir(char *path){
                 CreateDir(CurrentDirCluster, dir);
 				// aumentar o contador de match
                 match ++;
+				strcpy(CurrentDirName, token);
 				// sair do loop
                 break;
             }
         }
         // Se nao achar o diretorio   
         if(!match){
-            printf("Could not find directory!\n", aux);
+            printf("Could not find directory!\n");
             break;
         }
         // Ir para o proximo token
@@ -199,8 +204,20 @@ void change_dir(char *path){
     }
 }
 
+// funcao para printar em qual diretorio voce esta
 void printShell(){
-
+	printf("\033[0;32m");
+	printf("FatShell:");
+	printf("\033[0;34m");
+	// caso seja o root printa "img/"
+	if(RootDirCluster == CurrentDirCluster){
+		printf("[img/]");
+	// caso nao seja printar o diretorio atual	
+	}else{
+		printf("[%s/]", CurrentDirName);
+	}
+	printf("$ ");
+	printf("\033[0m");
 }
 
 int main(int agrc, char *argc[]){
@@ -241,7 +258,8 @@ int main(int agrc, char *argc[]){
 		CurrentDirCluster = RootDirCluster;
 		// Criar a estrutura de diretorio
 		CreateDir(CurrentDirCluster,dir);
-
+		// iniciar em root
+		strcpy(CurrentDirName, "img/");
 		// Main Loop
 		while(1) {
 			// Input do usuario
@@ -253,38 +271,26 @@ int main(int agrc, char *argc[]){
 			// Token para quebra de texto em " "
 			char * token; 
 			// prints do shell
-			printf("\033[0;32m");
-			printf("FatShell:");
-			printf("\033[0;34m");
-			printf("[img/]");
-			printf("$ ");
-			printf("\033[0m");
-			scanf(" %s", input);
+			printShell();
+			scanf(" %[^\n]", input);
 
+			token = strtok(input, " ");	
+			strcpy(op, token);
+			token = strtok(NULL, " ");	
+			if(token != NULL) {
+				strcpy(path, token);
+			}
 			// Opcoes de operacoes
-			if(!strcmp(input, "info")){
+			if(!strcmp(op, "info")){
 				bsInfo();
 			}
-			else if(!strcmp(input, "pwd")){
+			else if(!strcmp(op, "pwd")){
 				listDir(dir);
 			}
-			else if(!strcmp(input, "cd")){
-				// token = strtok(input, " ");
-				// strcpy(op, token); 
-				// token = strtok(path, " ");
-				// if(token == NULL) {
-				// 	printf("No directory provided\n");
-				// 	return;
-				// }
-				// change_dir(argc[1]);
-				printf("%s\n", argc[2]);
-				
+			else if(!strcmp(op, "cd")){
+				change_dir(path);
             }
-
 		}
-		
-		// bsInfo();
-
 	} else {
 		printf("File dosen't exist or not passed as an argument!\n");
 	}
