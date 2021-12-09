@@ -72,7 +72,7 @@ struct fat32Dir dir[16];
 char CurrentDirName[100];
 
 //Variavel para guardar o path atual
-char *CurrentPath[200];
+char CurrentPath[200][100];
 // variavel de caminhos totais do path
 int pathDeep = 0;
 
@@ -117,9 +117,15 @@ void CreateDir(int DirAddr, struct fat32Dir* direct) {
 }
 
 // Funcoao para implementar a operacao PWD
+void pwd(){
+	//loop em todo o path até o diretorio corrente
+	for(int i = 0; i < pathDeep; i++){
+		printf("%s/", CurrentPath[i]);
+	}
+	printf("\n");
+}
 
-
-// Funcao para implementar a operacao PWD
+// Funcao para implementar a operacao LS
 void listDir(struct fat32Dir* direct) {
 	// Loop para listar todos os diretorios
 	printf("Name:             Size:     CreatedAt:\n");
@@ -133,7 +139,7 @@ void listDir(struct fat32Dir* direct) {
 			direct[i].DIR_Attr == 16 ||
 			direct[i].DIR_Attr == 32
 		){
-			printf("%s       %d        %lu\n", direct[i].DIR_Name, direct[i].DIR_Attr, dir[i].DIR_CrtDate);
+			printf("%s       %d        %d\n", direct[i].DIR_Name, direct[i].DIR_Attr, dir[i].DIR_CrtDate);
 		}
 	}
 }
@@ -146,7 +152,6 @@ int LogicAddr(int32_t sector) {
 	// Retornar o endereco
     return (bs.bytes_per_sector * bs.reserved_sector_count) + ((sector - 2) * bs.bytes_per_sector) + (bs.bytes_per_sector * bs.table_count * bs.table_size_32);
 }
-
 
 // Funcao para implementar a operacao CD
 void change_dir(char *path){
@@ -194,7 +199,18 @@ void change_dir(char *path){
                 CreateDir(CurrentDirCluster, dir);
 				// aumentar o contador de match
                 match ++;
-				strcpy(CurrentDirName, token);
+				// caso o usuario queira voltar um diretorio
+				if(!strcmp(token, "..")){
+					strcpy(CurrentPath[pathDeep], " ");
+					pathDeep--;
+				}
+				else {
+					// adicionar o diretorio no caminho
+					strcpy(CurrentPath[pathDeep], token);
+					printf("%s",CurrentPath[pathDeep]);
+					pathDeep++;
+
+				}
 				// sair do loop
                 break;
             }
@@ -212,6 +228,32 @@ void change_dir(char *path){
     }
 }
 
+void attr(struct fat32Dir* direct, char dirSearch[]){
+	char aux[15];
+	// Transforma o nome para a variavel aux						       
+	strcpy(aux, dirSearch);
+	// Numero de espacos em branco na string
+	int whitespace = 11 - strlen(aux);
+	// Transformar tudo em uppercase 
+	for(int i = 0; i < 12; i ++){
+		aux[i] = toupper(aux[i]);
+	}
+	// Adicionar espaco em branco nas strings
+	for(int j = 0; j < whitespace; j ++){
+		strcat(aux, " ");
+	} 
+	// Loop para listar todos os diretorios
+	for( int i = 0 ; i < 16; i ++){
+		/***
+		 * caso for um arquivo ou um diretorio:
+		 * printar o nome do diretorio
+		***/
+		if(!strcmp(direct[i].DIR_Name, aux)){
+			printf("%s       %d        %d\n", direct[i].DIR_Name, direct[i].DIR_Attr, dir[i].DIR_CrtDate);
+		}
+	}
+}
+
 // funcao para printar em qual diretorio voce esta
 void printShell(){
 	printf("\033[0;32m");
@@ -219,10 +261,10 @@ void printShell(){
 	printf("\033[0;34m");
 	// caso seja o root printa "img/"
 	if(RootDirCluster == CurrentDirCluster){
-		printf("[img/]");
+		printf("[%s/]", CurrentPath[0]);
 	// caso nao seja printar o diretorio atual	
 	}else{
-		printf("[%s/]", CurrentDirName);
+		printf("[%s/]", CurrentPath[pathDeep-1]);
 	}
 	printf("$ ");
 	printf("\033[0m");
@@ -254,6 +296,9 @@ int main(int agrc, char *argc[]){
         fread(bs.volume_label, 1, 11, fd); 
 		fread(bs.fat_type_label, 1, 8, fd); 
 
+		// set root on currentPath
+		strcpy(CurrentPath[0], "img"); 
+		pathDeep++;
 		// Setores por cluster
 		sectors_per_cluster = bs.sectors_per_cluster;
 		// Bytes por setores
@@ -266,8 +311,6 @@ int main(int agrc, char *argc[]){
 		CurrentDirCluster = RootDirCluster;
 		// Criar a estrutura de diretorio
 		CreateDir(CurrentDirCluster,dir);
-		// iniciar em root
-		strcpy(CurrentDirName, "img/");
 		// Main Loop
 		while(1) {
 			// Input do usuario
@@ -293,7 +336,7 @@ int main(int agrc, char *argc[]){
 				bsInfo();
 			}
 			else if(!strcmp(op, "pwd")){
-
+				pwd();
 			}
 			else if(!strcmp(op, "ls")){
 				listDir(dir);
@@ -301,6 +344,17 @@ int main(int agrc, char *argc[]){
 			else if(!strcmp(op, "cd")){
 				change_dir(path);
             }
+			else if(!strcmp(op, "attr")){
+				attr(dir, path);
+			}
+			else if(!strcmp(op, "cluster")){
+				char clusterStr[512];
+				fseek(fd, atoi(path)*512 - 512, SEEK_SET);
+				fread(clusterStr, 1, 512, fd);
+				for(int i = 0; i < 512; i++){
+					printf("%c", clusterStr[i]);
+				}
+			}
 			else if(!strcmp(op, "exit")){
 				printf("Closing Fatshell!\n");
 				exit(0);
