@@ -71,6 +71,11 @@ struct fat32Dir dir[16];
 // Variavel para guardar o nome do diretorio
 char CurrentDirName[100];
 
+//Variavel para guardar o path atual
+char *CurrentPath[200];
+// variavel de caminhos totais do path
+int pathDeep = 0;
+
 // funcao para printar informacoes do boot sector
 void bsInfo() {
 	// Primeiro setor de dados
@@ -110,6 +115,9 @@ void CreateDir(int DirAddr, struct fat32Dir* direct) {
         fread(&direct[i].DIR_FileSize, 4, 1, fd);
     }
 }
+
+// Funcoao para implementar a operacao PWD
+
 
 // Funcao para implementar a operacao PWD
 void listDir(struct fat32Dir* direct) {
@@ -285,11 +293,18 @@ int main(int agrc, char *argc[]){
 				bsInfo();
 			}
 			else if(!strcmp(op, "pwd")){
+
+			}
+			else if(!strcmp(op, "ls")){
 				listDir(dir);
 			}
 			else if(!strcmp(op, "cd")){
 				change_dir(path);
             }
+			else if(!strcmp(op, "exit")){
+				printf("Closing Fatshell!\n");
+				exit(0);
+			}
 		}
 	} else {
 		printf("File dosen't exist or not passed as an argument!\n");
