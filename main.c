@@ -367,14 +367,6 @@ int main(int agrc, char *argc[]){
 			else if(!strcmp(op, "attr")){
 				attr(dir, path);
 			}
-			else if(!strcmp(op, "cluster")){
-				char clusterStr[512];
-				fseek(fd, atoi(path)*512 - 512, SEEK_SET);
-				fread(clusterStr, 1, 512, fd);
-				for(int i = 0; i < 512; i++){
-					printf("%c", clusterStr[i]);
-				}
-			}
 			else if(!strcmp(op, "exit")){
 				printf("Closing Fatshell!\n");
 				exit(0);
