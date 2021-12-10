@@ -127,8 +127,8 @@ void pwd(){
 
 // Funcao para implementar a operacao LS
 void listDir(struct fat32Dir* direct) {
+	char aux[9];
 	// Loop para listar todos os diretorios
-	printf("Name:             Size:     CreatedAt:\n");
 	for( int i = 0 ; i < 16; i ++){
 		/***
 		 * caso for um arquivo ou um diretorio:
@@ -139,7 +139,12 @@ void listDir(struct fat32Dir* direct) {
 			direct[i].DIR_Attr == 16 ||
 			direct[i].DIR_Attr == 32
 		){
-			printf("%s       %d        %d\n", direct[i].DIR_Name, direct[i].DIR_Attr, dir[i].DIR_CrtDate);
+			memcpy(aux, &direct[i].DIR_Name[0],8);
+			aux[8] = 0;
+			for(int i = 0; i < 8; i++){
+				aux[i] = tolower(aux[i]);
+			}
+			printf("%s\n", aux);
 		}
 	}
 }
@@ -207,7 +212,6 @@ void change_dir(char *path){
 				else {
 					// adicionar o diretorio no caminho
 					strcpy(CurrentPath[pathDeep], token);
-					printf("%s",CurrentPath[pathDeep]);
 					pathDeep++;
 
 				}
@@ -228,8 +232,11 @@ void change_dir(char *path){
     }
 }
 
+// extensao do arquivo
+char ext[3];
 void attr(struct fat32Dir* direct, char dirSearch[]){
 	char aux[15];
+	char dirNameAux[12];
 	// Transforma o nome para a variavel aux						       
 	strcpy(aux, dirSearch);
 	// Numero de espacos em branco na string
@@ -239,17 +246,30 @@ void attr(struct fat32Dir* direct, char dirSearch[]){
 		aux[i] = toupper(aux[i]);
 	}
 	// Adicionar espaco em branco nas strings
-	for(int j = 0; j < whitespace; j ++){
+	for(int j = 0; j < whitespace; j ++) {
 		strcat(aux, " ");
 	} 
 	// Loop para listar todos os diretorios
 	for( int i = 0 ; i < 16; i ++){
-		/***
-		 * caso for um arquivo ou um diretorio:
-		 * printar o nome do diretorio
-		***/
-		if(!strcmp(direct[i].DIR_Name, aux)){
-			printf("%s       %d        %d\n", direct[i].DIR_Name, direct[i].DIR_Attr, dir[i].DIR_CrtDate);
+		// setar nome do diretorio sem a extensao
+		strcpy(dirNameAux, direct[i].DIR_Name);
+		// get extension
+		for (int j = 0; j < 3; j++){
+			ext[j] = dirNameAux[8+j]; 
+		}
+		// delete extension to compare
+		dirNameAux[10] = ' ';
+		dirNameAux[9] = ' ';
+		dirNameAux[8] = ' ';
+
+		// caso for encontrado o arquivo, printar seus atributos
+		if(!strcmp(dirNameAux, aux)){
+			printf("Name: %s\n", dirNameAux);
+			printf("Extension: %s\n", ext);
+			printf("Dir Atribute: %d\n", direct[i].DIR_Attr);
+			printf("Size: %d\n", direct[i].DIR_FileSize);
+			printf("First Cluster High: %d\n", direct[i].DIR_FirstClusterHigh);
+			printf("First Cluster Low: %d\n", direct[i].DIR_FstClusLO);
 		}
 	}
 }
