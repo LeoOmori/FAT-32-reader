@@ -1,3 +1,12 @@
+/* ---
+Alunos: Leonardo omori, Jean Miguel
+Data: 10/12/2021
+Professor: Rodrigo Campiolo
+Trabalho de Sistemas Operacionais
+P2.  Implementação de estruturas e operações para manipulação de sistemas de arquivos
+Semáforos e Monitores
+--- */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
