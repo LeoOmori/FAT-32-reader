@@ -240,12 +240,17 @@ void change_dir(char *path){
         }
     }
 }
-
+// funcao para printar em texto um cluster
 void cluster(int clusterStart){
+	// pega o endereco do cluster
 	int CurrentDirCluster = LogicAddr(clusterStart);
+	// auxiliar para receber o cluster 
 	char stringOfCluster[byte_per_cluster];
+	// ir para o cluster
 	fseek(fd, CurrentDirCluster, SEEK_SET);
+	// ler o cluster
 	fread(stringOfCluster, 1, byte_per_cluster, fd);
+	// printar o cluster
 	printf("%s\n",stringOfCluster);
 }
 
