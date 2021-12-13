@@ -241,6 +241,14 @@ void change_dir(char *path){
     }
 }
 
+void cluster(int clusterStart){
+	int CurrentDirCluster = LogicAddr(clusterStart);
+	char stringOfCluster[byte_per_cluster];
+	fseek(fd, CurrentDirCluster, SEEK_SET);
+	fread(stringOfCluster, 1, byte_per_cluster, fd);
+	printf("%s\n",stringOfCluster);
+}
+
 // extensao do arquivo
 char ext[3];
 void attr(struct fat32Dir* direct, char dirSearch[]){
@@ -307,7 +315,7 @@ int main(int agrc, char *argc[]){
 		exit(0);
 	}
 	// Caso o arquivo exista
-	if(fd != NULL){
+	if(fd != NULL) {
 		// Ler o boot section
         fseek(fd, 3, SEEK_SET);
         fread(bs.oem_name, 1, 8, fd);
@@ -375,6 +383,9 @@ int main(int agrc, char *argc[]){
             }
 			else if(!strcmp(op, "attr")){
 				attr(dir, path);
+			}
+			else if(!strcmp(op, "cluster")){
+				cluster(atoi(path));
 			}
 			else if(!strcmp(op, "exit")){
 				printf("Closing Fatshell!\n");
